@@ -27,8 +27,7 @@ canvas { display:block; }
 .hp-wrap.right .hp-name { justify-content:flex-end; color:#ff2b6b; text-shadow:0 0 8px #ff2b6b; }
 .wins { font-size:13px; letter-spacing:2px; opacity:0.9; }
 .hp-bar {
-  width:100%; height:20px;
-  background:rgba(0,40,60,0.6);
+  width:100%; height:20px; background:rgba(0,40,60,0.6);
   border:2px solid #00eaff;
   box-shadow:0 0 12px #00eaff inset, 0 0 12px #00eaff;
   overflow:hidden;
@@ -482,16 +481,17 @@ canvas { display:block; }
 }
 #touch-toggle.on { background:rgba(0,234,255,0.2); color:#fff; }
 
+/* Rotate hint */
 #rotate-hint {
   position:fixed; inset:0;
-  background:rgba(0,0,0,0.92);
+  background:rgba(0,0,0,0.94);
   display:none; align-items:center; justify-content:center;
   z-index:300; color:#7df9ff; font-family:monospace;
   font-size:14px; letter-spacing:3px; text-align:center; padding:40px;
+  cursor:pointer;
 }
-@media (orientation: portrait) and (max-width: 900px) {
-  #rotate-hint.show { display:flex; }
-}
+#rotate-hint.show { display:flex; }
+#rotate-hint.dismissed { display:none !important; }
 </style>
 </head>
 <body>
@@ -626,13 +626,43 @@ canvas { display:block; }
     </div>
   </div>
 
-  <div id="rotate-hint" class="show">
+  <div id="rotate-hint">
     <div>
       <div style="font-size:36px;margin-bottom:14px;">↻</div>
       ROTATE YOUR DEVICE<br>
-      <span style="opacity:.6;font-size:10px;">landscape for best experience</span>
+      <span style="opacity:.6;font-size:10px;">landscape for best experience</span><br>
+      <span style="opacity:.4;font-size:9px;margin-top:24px;display:block;">[ TAP ANYWHERE TO CONTINUE ]</span>
     </div>
   </div>
+
+  <script>
+    // Rotate hint manager
+    (function() {
+      function setup() {
+        const hint = document.getElementById('rotate-hint');
+        if (!hint || hint.dataset.ready) return;
+        hint.dataset.ready = '1';
+        const update = () => {
+          if (hint.classList.contains('dismissed')) return;
+          const portrait = window.matchMedia('(orientation: portrait)').matches;
+          if (portrait && window.innerWidth < 900) hint.classList.add('show');
+          else hint.classList.remove('show');
+        };
+        const dismiss = (e) => {
+          if (e) e.preventDefault();
+          hint.classList.add('dismissed');
+          hint.classList.remove('show');
+        };
+        hint.addEventListener('click', dismiss);
+        hint.addEventListener('touchstart', dismiss, { passive: false });
+        window.addEventListener('resize', update);
+        window.addEventListener('orientationchange', () => setTimeout(update, 200));
+        update();
+      }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setup);
+      else setup();
+    })();
+  </script>
 
   <script type="importmap">
   {

@@ -88,6 +88,8 @@ const COMBO_CHALLENGES = [
 
 const SAVE_KEY = 'mechduel_story_progress';
 const ARENA_MIN = -12, ARENA_MAX = 12;
+const CAMERA_BASE_Y = 5.2;
+const CAMERA_BASE_Z = 12.5;
 
 /* ═══════════════════════════════════════════════════════════════
    AUDIO MANAGER
@@ -96,20 +98,27 @@ class AudioManager {
   constructor() { this.ctx = null; this.master = null; this.enabled = true; this.bgmTimer = null; this.bgmStep = 0; }
   init() {
     if (this.ctx) return;
-    try { this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      this.master = this.ctx.createGain(); this.master.gain.value = 0.5; this.master.connect(this.ctx.destination);
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.5;
+      this.master.connect(this.ctx.destination);
     } catch(e) { this.enabled = false; }
   }
   _now() { return this.ctx.currentTime; }
   _tone({freq=220,type='sine',dur=0.15,vol=0.5,freqEnd=null,delay=0}) {
     if (!this.enabled || !this.ctx) return;
     const t0 = this._now() + delay;
-    const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
-    osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
     if (freqEnd !== null) osc.frequency.exponentialRampToValueAtTime(Math.max(0.01, freqEnd), t0 + dur);
-    gain.gain.setValueAtTime(0.0001, t0); gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.008);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.008);
     gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    osc.connect(gain).connect(this.master); osc.start(t0); osc.stop(t0 + dur + 0.05);
+    osc.connect(gain).connect(this.master);
+    osc.start(t0); osc.stop(t0 + dur + 0.05);
   }
   _noise({dur=0.15,vol=0.5,filterFreq=1200,delay=0}) {
     if (!this.enabled || !this.ctx) return;
@@ -118,14 +127,18 @@ class AudioManager {
     const buffer = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
-    const src = this.ctx.createBufferSource(); src.buffer = buffer;
-    const filter = this.ctx.createBiquadFilter(); filter.type = 'bandpass';
-    filter.frequency.value = filterFreq; filter.Q.value = 0.7;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = filterFreq;
+    filter.Q.value = 0.7;
     const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(vol, t0); gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    src.connect(filter).connect(gain).connect(this.master); src.start(t0); src.stop(t0 + dur + 0.05);
+    gain.gain.setValueAtTime(vol, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(filter).connect(gain).connect(this.master);
+    src.start(t0); src.stop(t0 + dur + 0.05);
   }
-  punch() { this._tone({freq:180,freqEnd:90,type:'square',dur:0.08,vol:0.25}); this._noise({dur:0.06,vol:0.35,filterFreq:800}); }
   hit() { this._noise({dur:0.14,vol:0.6,filterFreq:1400}); this._tone({freq:120,freqEnd:60,type:'triangle',dur:0.14,vol:0.4}); this._tone({freq:400,freqEnd:200,type:'sine',dur:0.1,vol:0.2,delay:0.01}); }
   block() { this._tone({freq:900,freqEnd:1400,type:'triangle',dur:0.08,vol:0.25}); this._noise({dur:0.06,vol:0.25,filterFreq:3000}); }
   laser() { this._tone({freq:900,freqEnd:180,type:'sawtooth',dur:0.22,vol:0.3}); this._tone({freq:1600,freqEnd:400,type:'square',dur:0.2,vol:0.15,delay:0.01}); }
@@ -149,11 +162,10 @@ class AudioManager {
       this.bgmStep++;
     }, 230);
   }
-  stopBGM() { if (this.bgmTimer) { clearInterval(this.bgmTimer); this.bgmTimer = null; } }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   TIME MANAGER (hit-stop + slow-mo)
+   TIME MANAGER
    ═══════════════════════════════════════════════════════════════ */
 class TimeManager {
   constructor() { this.scale = 1; this.hitStopTimer = 0; this.slowMoTimer = 0; this.slowMoScale = 1; }
@@ -172,14 +184,18 @@ class TimeManager {
 class InputManager {
   constructor(touch=null) {
     this.keys = {}; this.pressedThisFrame = {}; this.touch = touch;
+    const prevent = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Slash','Period','Comma','Backspace','F1','F2','F3','F4','F5'];
     window.addEventListener('keydown', (e) => {
       if (!this.keys[e.code]) this.pressedThisFrame[e.code] = true;
       this.keys[e.code] = true;
-      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Slash','Period','Comma','Backspace'].includes(e.code)) e.preventDefault();
+      if (prevent.includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
   }
-  consumePress(code) { if (this.pressedThisFrame[code]) { this.pressedThisFrame[code] = false; return true; } return false; }
+  consumePress(code) {
+    if (this.pressedThisFrame[code]) { this.pressedThisFrame[code] = false; return true; }
+    return false;
+  }
   endFrame() { this.pressedThisFrame = {}; if (this.touch) this.touch.endFrame(); }
   getP1() {
     const kb = {
@@ -230,9 +246,12 @@ class TouchManager {
     this.root.appendChild(this.stickZone);
     this.btns = document.createElement('div'); this.btns.className = 'touch-buttons';
     const defs = [
-      { key:'ult', label:'ULT', cls:'big ult' }, { key:'punch', label:'👊', cls:'big punch' },
-      { key:'launch', label:'⬆', cls:'launch' }, { key:'laser', label:'✦', cls:'laser' },
-      { key:'jump', label:'⇧', cls:'jump' }, { key:'block', label:'🛡', cls:'block' },
+      { key:'ult', label:'ULT', cls:'big ult' },
+      { key:'punch', label:'👊', cls:'big punch' },
+      { key:'launch', label:'⬆', cls:'launch' },
+      { key:'laser', label:'✦', cls:'laser' },
+      { key:'jump', label:'⇧', cls:'jump' },
+      { key:'block', label:'🛡', cls:'block' },
     ];
     for (const d of defs) {
       const b = document.createElement('button');
@@ -261,7 +280,7 @@ class TouchManager {
       this.stickBaseEl.style.top  = (e.clientY - rect.top)  + 'px';
       this.stickBaseEl.style.opacity = 1;
       this._updateKnob(0, 0);
-      this.stickZone.setPointerCapture(e.pointerId);
+      try { this.stickZone.setPointerCapture(e.pointerId); } catch {}
     });
     this.stickZone.addEventListener('pointermove', (e) => {
       if (!this.stickActive || e.pointerId !== this.stickId) return;
@@ -366,7 +385,7 @@ class VFXManager {
   spawnFlash(position, color=0xffffff, intensity=40) {
     const light = new THREE.PointLight(color, intensity, 8, 2);
     light.position.copy(position); this.scene.add(light);
-    this.activeFlashes.push({ light, life:0.12, maxLife:0.12 });
+    this.activeFlashes.push({ light, life:0.12, maxLife:0.12, baseIntensity:intensity });
   }
   spawnHitImpact(position, color=0xffe066) {
     this.spawnSpark(position, color, 30, 8);
@@ -475,7 +494,7 @@ class VFXManager {
     // Flashes
     for (let i = this.activeFlashes.length - 1; i >= 0; i--) {
       const f = this.activeFlashes[i]; f.life -= dt;
-      f.light.intensity *= (f.life / f.maxLife);
+      f.light.intensity = f.baseIntensity * (f.life / f.maxLife);
       if (f.life <= 0) { this.scene.remove(f.light); this.activeFlashes.splice(i, 1); }
     }
     // Trails
@@ -502,7 +521,10 @@ class VFXManager {
     for (let i = this.activeAirImpacts.length - 1; i >= 0; i--) {
       const a = this.activeAirImpacts[i]; a.life -= dt;
       const t = 1 - a.life / a.maxLife;
-      if (a.type === 'column') { a.mesh.scale.set(1 + t * 1.5, 1, 1 + t * 1.5); a.mesh.material.opacity = Math.max(0, 0.85 * (1 - t)); }
+      if (a.type === 'column') {
+        a.mesh.scale.set(1 + t * 1.5, 1, 1 + t * 1.5);
+        a.mesh.material.opacity = Math.max(0, 0.85 * (1 - t));
+      }
       if (a.life <= 0) {
         this.scene.remove(a.mesh); a.mesh.geometry.dispose(); a.mesh.material.dispose();
         this.activeAirImpacts.splice(i, 1);
@@ -534,7 +556,7 @@ class VFXManager {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   PROJECTILE (LASER)
+   PROJECTILE
    ═══════════════════════════════════════════════════════════════ */
 class Projectile {
   constructor(scene, startPos, direction, color, opts={}) {
@@ -612,6 +634,7 @@ class Robot {
     this.energyGainOnHit = 12; this.energyGainOnTake = 8;
     this.ultActive = false; this.ultTimer = 0; this.ultDuration = 1.6;
     this.ultHasFired = false; this.ultCooldown = 0;
+    this._trailTimer = 0;
     this.group = new THREE.Group();
     this.group.position.set(x, 0, 0);
     this.accentColor = color;
@@ -722,12 +745,19 @@ class Robot {
     this.launcherTimer = 0; this.launcherCooldown = 0;
     this.launchState = 'none'; this.launchTimer = 0; this.launchVX = 0; this.launchVY = 0;
     this.juggleCount = 0; this.wallBounced = false; this.velocityY = 0; this.grounded = true;
+    this.onWallBounce = false; this.onLanding = false; this._trailTimer = 0;
     this.facing = facing; this.energy = 0;
     this.ultActive = false; this.ultTimer = 0; this.ultHasFired = false; this.ultCooldown = 0;
     this.group.position.set(x, 0, 0);
     this.group.rotation.set(0, facing > 0 ? 0 : Math.PI, 0);
-    this.visor.material.emissiveIntensity = 1.2; this.core.material.emissiveIntensity = 1.2;
-    this.groundRing.material.opacity = 0.4; this.shield.material.opacity = 0;
+    this.visor.material.emissiveIntensity = 1.2;
+    this.core.material.emissiveIntensity = 1.2;
+    this.groundRing.material.opacity = 0.4;
+    this.shield.material.opacity = 0;
+    this.rightArm.rotation.z = 0;
+    this.rightArm.position.z = 0;
+    this.rightArm.position.y = this.rightArmBaseY;
+    this.torso.rotation.x = 0;
   }
   tryUltimate() {
     if (!this.alive || this.ultCooldown > 0 || this.energy < this.maxEnergy) return false;
@@ -834,7 +864,8 @@ class Robot {
     this.group.rotation.z = 0;
     const ta = this.attackTimer > 0 ? 1 - this.attackTimer / this.attackDuration : 0;
     const thrust = ta > 0 ? Math.sin(Math.min(1, ta * 1.6) * Math.PI) * 0.9 : 0;
-    this.rightArm.position.z = thrust; this.rightArm.position.y = this.rightArmBaseY;
+    this.rightArm.position.z = thrust;
+    this.rightArm.position.y = this.rightArmBaseY;
     this.torso.rotation.x = thrust * 0.35;
     const tl = this.launcherTimer > 0 ? 1 - this.launcherTimer / this.launcherDuration : 0;
     if (tl > 0) {
@@ -1096,8 +1127,9 @@ class StoryManager {
   constructor(callbacks) {
     this.cb = callbacks;
     this.progress = this._load();
-    this.chapterIndex = 0; this.currentLine = 0;
+    this.chapterIndex = 0;
     this._typing = false; this._advanceResolve = null; this._typeTimer = null;
+    this.busy = false;
     this.overlay = document.getElementById('story-overlay');
     this.dialogue = document.getElementById('story-dialogue');
     this.speaker = document.getElementById('story-speaker');
@@ -1114,8 +1146,11 @@ class StoryManager {
     this._wireInputs();
   }
   _load() {
-    try { const raw = localStorage.getItem(SAVE_KEY); if (!raw) return 0;
-      const n = parseInt(raw, 10); return isNaN(n) ? 0 : Math.max(0, Math.min(n, CHAPTERS.length - 1));
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return 0;
+      const n = parseInt(raw, 10);
+      return isNaN(n) ? 0 : Math.max(0, Math.min(n, CHAPTERS.length - 1));
     } catch { return 0; }
   }
   _save() { try { localStorage.setItem(SAVE_KEY, String(this.progress)); } catch {} }
@@ -1131,43 +1166,55 @@ class StoryManager {
   _showOverlay() { this.overlay.classList.remove('hidden'); this.dialogue.classList.remove('hidden'); }
   _hideOverlay() { this.overlay.classList.add('hidden'); }
   async _runChapterIntro() {
+    this.busy = true;
     const c = this.chapter;
-    this.titleEl.textContent = c.title; this.subtitleEl.textContent = c.subtitle;
+    this.titleEl.textContent = c.title;
+    this.subtitleEl.textContent = c.subtitle;
     this.chapterEl.textContent = `CHAPTER ${c.id} / ${CHAPTERS.length}`;
     await this._showDialogue(c.intro);
     this._hideOverlay();
+    this.busy = false;
     this.cb.onStartFight({
       opponentIdx:c.opponentIdx, difficulty:c.difficulty, statMod:c.statMod,
       opponentName:c.opponentName, isBoss:!!c.isBoss,
     });
   }
   async onMatchEnd(p1Wins, p2Wins) {
+    if (this.busy) return;
+    this.busy = true;
     const playerWon = p1Wins > p2Wins;
     if (playerWon) {
       const c = this.chapter;
-      this.titleEl.textContent = 'VICTORY'; this.subtitleEl.textContent = c.subtitle;
+      this.titleEl.textContent = 'VICTORY';
+      this.subtitleEl.textContent = c.subtitle;
       this.chapterEl.textContent = `CHAPTER ${c.id} / ${CHAPTERS.length}`;
       await this._showDialogue(c.outro);
       this._hideOverlay();
       if (this.chapterIndex < CHAPTERS.length - 1) {
         this.progress = this.chapterIndex + 1; this._save();
         this.chapterIndex = this.progress;
+        this.busy = false;
         this._runChapterIntro();
       } else {
         this.progress = 0; this._save();
+        this.busy = false;
         this._showResult('CHAMPION!', 'You conquered the Mech Arena', 'MAIN MENU', () => {
-          this._hideOverlay(); this.cb.onQuit();
+          this._hideOverlay();
+          this.cb.onQuit();
         });
       }
     } else {
+      this.busy = false;
       this._showResult('DEFEAT', 'You have fallen. Try again?', 'RETRY', () => {
-        this._hideOverlay(); this._runChapterIntro();
+        this._hideOverlay();
+        this._runChapterIntro();
       });
     }
   }
   _showResult(title, sub, btnLabel, onBtn) {
     this.resultOverlay.classList.remove('hidden');
-    this.resultTitle.textContent = title; this.resultSub.textContent = sub;
+    this.resultTitle.textContent = title;
+    this.resultSub.textContent = sub;
     this.resultBtn.textContent = btnLabel;
     const cleanup = () => {
       this.resultBtn.onclick = null; this.abandonBtn.onclick = null;
@@ -1178,7 +1225,10 @@ class StoryManager {
   }
   async _showDialogue(lines) {
     this._showOverlay();
-    for (const line of lines) { await this._typeLine(line); await this._waitForAdvance(); }
+    for (const line of lines) {
+      await this._typeLine(line);
+      await this._waitForAdvance();
+    }
   }
   _typeLine(line) {
     return new Promise((resolve) => {
@@ -1189,9 +1239,13 @@ class StoryManager {
       this._typing = true;
       const full = line.text; let i = 0;
       const tick = () => {
-        if (!this._typing) { this.text.textContent = full; this.continueHint.style.opacity = '1'; resolve(); return; }
+        if (!this._typing) {
+          this.text.textContent = full; this.continueHint.style.opacity = '1';
+          resolve(); return;
+        }
         if (i >= full.length) {
-          this._typing = false; this.continueHint.style.opacity = '1'; resolve(); return;
+          this._typing = false; this.continueHint.style.opacity = '1';
+          resolve(); return;
         }
         this.text.textContent += full[i++];
         this._typeTimer = setTimeout(tick, 24);
@@ -1204,7 +1258,10 @@ class StoryManager {
     if (this._typing) { this._typing = false; clearTimeout(this._typeTimer); return; }
     if (this._advanceResolve) { const r = this._advanceResolve; this._advanceResolve = null; r(); }
   }
-  isActive() { return !this.overlay.classList.contains('hidden') || !this.resultOverlay.classList.contains('hidden'); }
+  isActive() {
+    return !this.overlay.classList.contains('hidden') ||
+           !this.resultOverlay.classList.contains('hidden');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1217,18 +1274,14 @@ class TrainingMode {
     this.infiniteHP = true; this.slowMotion = false;
     this.dummyMode = 'stand';
     this.stats = { maxCombo:0, currentCombo:0, totalDamage:0, hitCount:0, lastMoveName:'—', lastStartup:0, lastActive:0, lastRecovery:0 };
-    this.currentChallenge = 0; this.challengeSequence = []; this.challengeProgress = 0;
+    this.currentChallenge = 0; this.challengeProgress = 0;
     this.completedChallenges = new Set();
-    this._buildDebugHelpers();
+    this.scene = null;
     this._buildPanel();
     this._buildChallengePanel();
   }
-  _buildDebugHelpers() {
-    this.helpers = { p1Hurt:null, p1Hit:null, p2Hurt:null, p2Hit:null };
-    this.activeRing = null;
-    this.helpersPending = true;
-  }
   attachScene(scene) {
+    if (this.scene) return;
     this.scene = scene;
     const mk = (color) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.4, 1.0),
@@ -1240,13 +1293,11 @@ class TrainingMode {
         new THREE.MeshBasicMaterial({ color, transparent:true, opacity:0.35, depthWrite:false, wireframe:true }));
       s.visible = false; scene.add(s); return s;
     };
-    this.helpers.p1Hurt = mk(0x00eaff); this.helpers.p1Hit = mkHit(0xffe066);
-    this.helpers.p2Hurt = mk(0xff2b6b); this.helpers.p2Hit = mkHit(0xff8800);
+    this.helpers = { p1Hurt:mk(0x00eaff), p1Hit:mkHit(0xffe066), p2Hurt:mk(0xff2b6b), p2Hit:mkHit(0xff8800) };
     const ring = new THREE.Mesh(new THREE.RingGeometry(1.6, 1.75, 40),
       new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.5, side:THREE.DoubleSide, depthWrite:false }));
     ring.rotation.x = -Math.PI / 2; ring.visible = false;
     scene.add(ring); this.activeRing = ring;
-    this.helpersPending = false;
   }
   _buildPanel() {
     this.panel = document.createElement('div');
@@ -1264,7 +1315,7 @@ class TrainingMode {
         <div class="tp-frame-col active"><b id="tp-active">0</b><span>Active</span></div>
         <div class="tp-frame-col"><b id="tp-recovery">0</b><span>Recovery</span></div>
       </div>
-      <hr><div class="tp-header small">OPTIONS · press key</div>
+      <hr><div class="tp-header small">OPTIONS</div>
       <div class="tp-keyrow"><span class="kbd">F1</span><span>Hitboxes</span><span class="state" id="tp-hitbox-state">OFF</span></div>
       <div class="tp-keyrow"><span class="kbd">F2</span><span>Frame Data</span><span class="state" id="tp-frame-state">OFF</span></div>
       <div class="tp-keyrow"><span class="kbd">F3</span><span>Infinite HP</span><span class="state on" id="tp-hp-state">ON</span></div>
@@ -1313,15 +1364,16 @@ class TrainingMode {
     this.panel.classList.remove('hidden');
     this.challengePanel.classList.remove('hidden');
     this.stats = { maxCombo:0, currentCombo:0, totalDamage:0, hitCount:0, lastMoveName:'—', lastStartup:0, lastActive:0, lastRecovery:0 };
-    this.challengeProgress = 0; this.challengeSequence = [];
+    this.challengeProgress = 0;
     this._updateChallengeHighlight(); this._updatePanel();
     this.hud.setBigText('TRAINING');
     setTimeout(() => this.hud.setBigText(''), 1200);
   }
   exit() {
     this.active = false;
-    this.panel.classList.add('hidden'); this.challengePanel.classList.add('hidden');
-    Object.values(this.helpers).forEach(h => { if (h) h.visible = false; });
+    this.panel.classList.add('hidden');
+    this.challengePanel.classList.add('hidden');
+    if (this.helpers) Object.values(this.helpers).forEach(h => { if (h) h.visible = false; });
     if (this.activeRing) this.activeRing.visible = false;
   }
   handleKeys(input) {
@@ -1352,14 +1404,20 @@ class TrainingMode {
       this.panel.querySelector('#tp-dummy-state').textContent = this.dummyMode.toUpperCase();
     }
     if (input.consumePress('KeyR')) this._resetPositions();
-    if (input.consumePress('Backspace')) { this.currentChallenge = (this.currentChallenge + 1) % COMBO_CHALLENGES.length; this.challengeProgress = 0; this._updateChallengeHighlight(); }
-    if (input.consumePress('Slash')) { this.currentChallenge = (this.currentChallenge - 1 + COMBO_CHALLENGES.length) % COMBO_CHALLENGES.length; this.challengeProgress = 0; this._updateChallengeHighlight(); }
+    if (input.consumePress('Backspace')) {
+      this.currentChallenge = (this.currentChallenge + 1) % COMBO_CHALLENGES.length;
+      this.challengeProgress = 0; this._updateChallengeHighlight();
+    }
+    if (input.consumePress('Slash')) {
+      this.currentChallenge = (this.currentChallenge - 1 + COMBO_CHALLENGES.length) % COMBO_CHALLENGES.length;
+      this.challengeProgress = 0; this._updateChallengeHighlight();
+    }
   }
   _resetPositions() {
     if (!this.p1 || !this.p2) return;
     this.p1.reset(-5, +1); this.p2.reset(+5, -1);
     this.stats.currentCombo = 0; this.stats.totalDamage = 0; this.stats.hitCount = 0;
-    this.challengeProgress = 0; this.challengeSequence = [];
+    this.challengeProgress = 0;
     this.hud.setCombo('p1', 0); this.hud.setCombo('p2', 0);
     this.hud.setBigText('RESET'); setTimeout(() => this.hud.setBigText(''), 500);
   }
@@ -1369,7 +1427,11 @@ class TrainingMode {
     if (this.stats.currentCombo > this.stats.maxCombo) this.stats.maxCombo = this.stats.currentCombo;
     this.stats.totalDamage += damage; this.stats.hitCount++;
     this.stats.lastMoveName = moveName;
-    if (frameData) { this.stats.lastStartup = frameData.startup; this.stats.lastActive = frameData.active; this.stats.lastRecovery = frameData.recovery; }
+    if (frameData) {
+      this.stats.lastStartup = frameData.startup;
+      this.stats.lastActive = frameData.active;
+      this.stats.lastRecovery = frameData.recovery;
+    }
     this._updatePanel();
     this._registerChallengeMove(moveName);
   }
@@ -1388,19 +1450,18 @@ class TrainingMode {
       }
       this._updateChallengeHighlight();
     } else {
-      if (moveName === c.seq[0]) this.challengeProgress = 1;
-      else this.challengeProgress = 0;
+      this.challengeProgress = (moveName === c.seq[0]) ? 1 : 0;
       this._updateChallengeHighlight();
     }
   }
   update(rawDt) {
-    if (!this.active || this.helpersPending) return;
-    if (this.showHitboxes) this._updateHitboxMeshes();
-    else {
+    if (!this.active || !this.scene) return;
+    if (this.showHitboxes && this.helpers) this._updateHitboxMeshes();
+    else if (this.helpers) {
       Object.values(this.helpers).forEach(h => { if (h) h.visible = false; });
       if (this.activeRing) this.activeRing.visible = false;
     }
-    if (this.showFrameData && this.p1 && this.p2) this._updateFrameRing();
+    if (this.showFrameData && this.p1 && this.p2 && this.activeRing) this._updateFrameRing();
     else if (this.activeRing) this.activeRing.visible = false;
     if (this.infiniteHP) {
       if (this.p1 && this.p1.hp < this.p1.maxHP) this.p1.hp = this.p1.maxHP;
@@ -1408,22 +1469,26 @@ class TrainingMode {
     }
   }
   _updateHitboxMeshes() {
-    const p1 = this.p1, p2 = this.p2; if (!p1 || !p2) return;
+    const p1 = this.p1, p2 = this.p2; if (!p1 || !p2 || !this.helpers) return;
     this.helpers.p1Hurt.visible = true;
     this.helpers.p1Hurt.position.set(p1.group.position.x, p1.group.position.y + 1.7, 0);
     this.helpers.p2Hurt.visible = true;
     this.helpers.p2Hurt.position.set(p2.group.position.x, p2.group.position.y + 1.7, 0);
     const h1 = this.helpers.p1Hit, h2 = this.helpers.p2Hit;
     const m1 = p1.getActiveHitbox();
-    if (m1) { h1.visible = true; h1.position.copy(m1.center); h1.scale.setScalar(m1.radius); } else h1.visible = false;
+    if (m1) { h1.visible = true; h1.position.copy(m1.center); h1.scale.setScalar(m1.radius); }
+    else h1.visible = false;
     const m2 = p2.getActiveHitbox();
-    if (m2) { h2.visible = true; h2.position.copy(m2.center); h2.scale.setScalar(m2.radius); } else h2.visible = false;
+    if (m2) { h2.visible = true; h2.position.copy(m2.center); h2.scale.setScalar(m2.radius); }
+    else h2.visible = false;
   }
   _updateFrameRing() {
-    const p1 = this.p1; if (!p1) return;
+    const p1 = this.p1; if (!p1 || !this.activeRing) return;
     const attacking = p1.attackTimer > 0 || p1.launcherTimer > 0;
     if (attacking) {
-      const t = p1.attackTimer > 0 ? 1 - (p1.attackTimer / p1.attackDuration) : 1 - (p1.launcherTimer / p1.launcherDuration);
+      const t = p1.attackTimer > 0
+        ? 1 - (p1.attackTimer / p1.attackDuration)
+        : 1 - (p1.launcherTimer / p1.launcherDuration);
       const active = t > 0.25 && t < 0.65;
       this.activeRing.visible = true;
       this.activeRing.position.set(p1.group.position.x, 0.03, 0);
@@ -1474,7 +1539,8 @@ function createScene() {
   scene.fog = new THREE.Fog(0x05060a, 25, 70);
 
   const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 200);
-  camera.position.set(0, 5.2, 12.5); camera.lookAt(0, 2, 0);
+  camera.position.set(0, CAMERA_BASE_Y, CAMERA_BASE_Z);
+  camera.lookAt(0, 2, 0);
 
   const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -1495,7 +1561,6 @@ function createScene() {
   const rim1 = new THREE.PointLight(0x00eaff, 30, 30, 2); rim1.position.set(-12, 6, -6); scene.add(rim1);
   const rim2 = new THREE.PointLight(0xff2b6b, 30, 30, 2); rim2.position.set(12, 6, -6); scene.add(rim2);
 
-  // Arena floor
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 20),
     new THREE.MeshStandardMaterial({ color:0x0a0f18, metalness:0.9, roughness:0.35 }));
   floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
@@ -1541,21 +1606,26 @@ class PostFX {
     this.composer.addPass(new RenderPass(scene, camera));
     this.bloom = new UnrealBloomPass(size, 0.9, 0.6, 0.15);
     this.composer.addPass(this.bloom);
-    this.afterimage = new AfterimagePass(0.85); this.afterimage.enabled = false;
+    this.afterimage = new AfterimagePass(0.85);
+    this.afterimage.enabled = false;
     this.composer.addPass(this.afterimage);
-    this.rgb = new ShaderPass(RGBShiftShader); this.rgb.uniforms.amount.value = 0.0;
+    this.rgb = new ShaderPass(RGBShiftShader);
+    this.rgb.uniforms.amount.value = 0.0;
     this.composer.addPass(this.rgb);
     this.vignette = new ShaderPass(VignetteShader);
-    this.vignette.uniforms.offset.value = 1.1; this.vignette.uniforms.darkness.value = 1.25;
+    this.vignette.uniforms.offset.value = 1.1;
+    this.vignette.uniforms.darkness.value = 1.25;
     this.composer.addPass(this.vignette);
     this.film = new ShaderPass(FilmShader);
-    this.film.uniforms.nIntensity.value = 0.10; this.film.uniforms.sIntensity.value = 0.14;
+    this.film.uniforms.nIntensity.value = 0.10;
+    this.film.uniforms.sIntensity.value = 0.14;
     this.film.uniforms.grayscale.value = 0;
     this.composer.addPass(this.film);
     this.rgbPulse = 0; this.grainPulse = 0; this.afterimagePulse = 0;
 
     // Mobile: disable heavy passes
-    if (window.innerWidth < 900 || (('ontouchstart' in window) && window.innerWidth < 1100)) {
+    const isSmall = window.innerWidth < 900 || (('ontouchstart' in window) && window.innerWidth < 1100);
+    if (isSmall) {
       this.afterimage.enabled = false;
       this.film.enabled = false;
       this.bloom.strength = 0.7;
@@ -1563,7 +1633,8 @@ class PostFX {
 
     window.addEventListener('resize', () => {
       const W = window.innerWidth, H = window.innerHeight;
-      this.composer.setSize(W, H); this.bloom.resolution.set(W, H);
+      this.composer.setSize(W, H);
+      this.bloom.resolution.set(W, H);
     });
   }
   pulseHit(strength=0.008, grain=0.30) {
@@ -1573,7 +1644,8 @@ class PostFX {
   pulseCinematic() {
     this.rgbPulse = Math.max(this.rgbPulse, 0.022);
     this.grainPulse = Math.max(this.grainPulse, 0.7);
-    this.afterimagePulse = 1.0; this.afterimage.enabled = true;
+    this.afterimagePulse = 1.0;
+    this.afterimage.enabled = true;
   }
   pulseBloom(amount=0.35) { this.bloom.strength = Math.min(2.2, this.bloom.strength + amount); }
   update(dt) {
@@ -1592,7 +1664,6 @@ class PostFX {
     this.vignette.uniforms.darkness.value += (targetVig - this.vignette.uniforms.darkness.value) * Math.min(1, dt * 8);
     this.composer.render();
   }
-  render() { this.composer.render(); }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1611,7 +1682,8 @@ training.attachScene(scene);
 vfx.screenFlashEl = document.getElementById('screen-flash');
 
 function unlockAudio() {
-  audio.init(); audio.startBGM();
+  audio.init();
+  audio.startBGM();
   window.removeEventListener('keydown', unlockAudio);
   window.removeEventListener('click', unlockAudio);
 }
@@ -1620,7 +1692,6 @@ window.addEventListener('click', unlockAudio);
 
 touch.autoDetect();
 
-// Game state
 const game = {
   mode:'menu', state:'idle', paused:false,
   round:1, p1Wins:0, p2Wins:0, maxWins:2, stateTimer:2.5,
@@ -1640,20 +1711,15 @@ let p1PrevAtk=false, p2PrevAtk=false, p1PrevRng=false, p2PrevRng=false,
 let shakeTime=0, shakeStrength=0;
 function shakeCamera(strength=0.3, t=0.2) { shakeStrength = strength; shakeTime = t; }
 
-// Menu
 const menu = new MenuManager({
   onFight: (i1, i2) => { game.storyMode = false; startFight(i1, i2); },
   onResume: () => { game.paused = false; },
   onRestart: () => { game.paused = false; startFight(currentCharIdx.p1, currentCharIdx.p2); },
   onQuit: () => quitToMenu(),
   onStory: () => { story.begin(); },
-  onTraining: () => {
-    training.attachScene(scene);
-    startFight(currentCharIdx.p1, currentCharIdx.p2, { trainingMode:true });
-  },
+  onTraining: () => { startFight(currentCharIdx.p1, currentCharIdx.p2, { trainingMode:true }); },
 });
 
-// Story
 const story = new StoryManager({
   onStartFight: (opts) => {
     const c = ROSTER[opts.opponentIdx];
@@ -1719,7 +1785,6 @@ function startFight(p1Idx, p2Idx, opts = {}) {
   hud.setWins(0, 0); hud.setRound(1); hud.setBigText('');
 
   if (game.trainingMode) {
-    training.attachScene(scene);
     training.enter(p1, p2);
   } else {
     training.exit();
@@ -1776,7 +1841,8 @@ function resolveCombat(attacker, defender, defenderColor, attackerKey) {
   const dx = Math.abs(defender.group.position.x - hb.center.x);
   const dy = Math.abs((defender.group.position.y + 1.7) - hb.center.y);
   const dz = Math.abs(defender.group.position.z - hb.center.z);
-  if (dx < hb.radius && dy < 1.5 && dz < 1.0) {
+  const dyLimit = defender.launchState === 'launched' ? 3.2 : 1.5;
+  if (dx < hb.radius && dy < dyLimit && dz < 1.0) {
     attacker.attackHasHit = true;
     const knockDir = defender.group.position.x >= attacker.group.position.x ? 1 : -1;
 
@@ -1824,7 +1890,7 @@ function resolveCombat(attacker, defender, defenderColor, attackerKey) {
   }
 }
 
-function resolveLauncher(attacker, defender, defenderColor, attackerKey) {
+function resolveLauncher(attacker, defender, attackerKey) {
   if (!attacker.alive || !defender.alive) return;
   const hb = attacker.getLauncherHitbox();
   if (!hb || attacker.launcherHasHit) return;
@@ -1914,7 +1980,15 @@ function animate() {
     return;
   }
 
-  // Pause
+  // Story overlay active — freeze the fight
+  if (story.isActive()) {
+    input.endFrame();
+    vfx.update(rawDt);
+    postfx.update(rawDt);
+    return;
+  }
+
+  // Pause toggle
   if (input.consumePress('Escape')) {
     if (game.paused) { game.paused = false; menu.hidePause(); }
     else if (game.state === 'fighting' || game.state === 'countdown') {
@@ -1931,7 +2005,9 @@ function animate() {
       game.p2IsAI = !game.p2IsAI;
       hud.setAIMode(game.p2IsAI, game.aiDifficulty);
       hud.setBigText(game.p2IsAI ? 'P2: AI' : 'P2: HUMAN');
-      setTimeout(() => { if (game.state === 'fighting' || game.state === 'countdown') hud.setBigText(''); }, 800);
+      setTimeout(() => {
+        if (game.state === 'fighting' || game.state === 'countdown') hud.setBigText('');
+      }, 800);
     }
     if (input.consumePress('Digit1') && ai && !game.storyMode) { game.aiDifficulty='easy'; ai.setDifficulty('easy'); hud.setAIMode(game.p2IsAI,'easy'); }
     if (input.consumePress('Digit2') && ai && !game.storyMode) { game.aiDifficulty='medium'; ai.setDifficulty('medium'); hud.setAIMode(game.p2IsAI,'medium'); }
@@ -1939,7 +2015,10 @@ function animate() {
   }
 
   if (game.paused) {
-    input.endFrame(); vfx.update(rawDt); postfx.update(rawDt); return;
+    input.endFrame();
+    vfx.update(rawDt);
+    postfx.update(rawDt);
+    return;
   }
 
   const gameDt = time.tick(rawDt);
@@ -1985,7 +2064,7 @@ function animate() {
     }
   }
 
-  // Robots
+  // Robots + combat
   if (p1 && p2) {
     p1.update(gameDt, in1, ARENA_MIN, ARENA_MAX);
     p2.update(gameDt, in2, ARENA_MIN, ARENA_MAX);
@@ -1995,12 +2074,12 @@ function animate() {
 
     resolveCombat(p1, p2, p2.accentColor, 'p1');
     resolveCombat(p2, p1, p1.accentColor, 'p2');
-    resolveLauncher(p1, p2, p2.accentColor, 'p1');
-    resolveLauncher(p2, p1, p1.accentColor, 'p2');
+    resolveLauncher(p1, p2, 'p1');
+    resolveLauncher(p2, p1, 'p2');
     resolveUltimate(p1, p2, 'p1');
     resolveUltimate(p2, p1, 'p2');
 
-    // Wall bounce + landing
+    // Wall bounce + landing + air trail
     [p1, p2].forEach((r) => {
       if (r.onWallBounce) {
         r.onWallBounce = false;
@@ -2020,7 +2099,15 @@ function animate() {
         shakeCamera(0.3, 0.2);
       }
       if (r.launchState === 'launched') {
-        vfx.spawnAirTrail(new THREE.Vector3(r.group.position.x + (Math.random() - 0.5) * 0.4, r.group.position.y + 1.5, 0), r.accentColor);
+        r._trailTimer = (r._trailTimer || 0) - rawDt;
+        if (r._trailTimer <= 0) {
+          r._trailTimer = 0.035;
+          vfx.spawnAirTrail(
+            new THREE.Vector3(
+              r.group.position.x + (Math.random() - 0.5) * 0.4,
+              r.group.position.y + 1.5, 0),
+            r.accentColor);
+        }
       }
     });
   }
@@ -2085,7 +2172,8 @@ function animate() {
         vfx.spawnFlash(new THREE.Vector3(mid, 2, 0), 0xffffff, 120);
         vfx.flashScreen('#ffffff', 400);
         audio.ko();
-        postfx.pulseCinematic(); postfx.pulseBloom(1.0);
+        postfx.pulseCinematic();
+        postfx.pulseBloom(1.0);
         game.state = 'ko'; game.stateTimer = 2.6;
       }
     }
@@ -2119,6 +2207,7 @@ function animate() {
     else if (game.state === 'matchover') {
       game.stateTimer -= rawDt;
       if (game.stateTimer <= 0) {
+        game.state = 'transition';  // prevent re-entry
         if (game.trainingMode) {
           p1.reset(-5, +1); p2.reset(+5, -1);
           game.p1Wins = 0; game.p2Wins = 0; hud.setWins(0, 0);
@@ -2140,7 +2229,9 @@ function animate() {
     const mid = (p1.group.position.x + p2.group.position.x) * 0.5;
     const targetX = mid * 0.35;
     camera.position.x += (targetX - camera.position.x) * Math.min(1, rawDt * 3);
+    camera.position.y = CAMERA_BASE_Y;   // FIX: reset Y every frame
     camera.lookAt(mid * 0.2, 2, 0);
+
     if (shakeTime > 0) {
       shakeTime -= rawDt;
       const s = shakeStrength * (shakeTime / 0.22);

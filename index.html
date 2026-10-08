@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#05060a">
+<title>Mech Duel — 3D Robot Fighting</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; overflow:hidden; background:#05060a; font-family:'Segoe UI', monospace; color:#fff; }
+canvas { display:block; }
+
+/* ========== HUD ========== */
+#hud {
+  position:fixed; top:0; left:0; right:0;
+  display:flex; justify-content:space-between; align-items:flex-start;
+  padding:16px 24px; pointer-events:none; z-index:5;
+}
+.hp-wrap { width:38%; }
+.hp-name {
+  font-size:13px; letter-spacing:3px; color:#00eaff;
+  margin-bottom:5px; display:flex; gap:10px; align-items:center;
+  text-shadow:0 0 8px #00eaff;
+}
+.hp-wrap.right .hp-name { justify-content:flex-end; color:#ff2b6b; text-shadow:0 0 8px #ff2b6b; }
+.wins { font-size:13px; letter-spacing:2px; opacity:0.9; }
+.hp-bar {
+  width:100%; height:20px;
+  background:rgba(0,40,60,0.6);
+  border:2px solid #00eaff;
+  box-shadow:0 0 12px #00eaff inset, 0 0 12px #00eaff;
+  overflow:hidden;
+}
+.hp-fill {
+  height:100%; width:100%;
+  background:linear-gradient(90deg, #00eaff, #7df9ff);
+  transition:width 0.25s ease-out;
+}
+.hp-wrap.right .hp-fill {
+  margin-left:auto;
+  background:linear-gradient(270deg, #ff2b6b, #ff8aa8);
+}
+.hp-wrap.right .hp-bar {
+  border-color:#ff2b6b;
+  box-shadow:0 0 12px #ff2b6b inset, 0 0 12px #ff2b6b;
+}
+.energy-bar {
+  width:100%; height:7px; margin-top:4px;
+  background:rgba(0,30,40,0.6);
+  border:1px solid #555; overflow:hidden;
+}
+.hp-wrap.right .energy-bar { transform:scaleX(-1); }
+.energy-fill {
+  height:100%; width:0%;
+  background:linear-gradient(90deg, #ffaa00, #ffe066, #fff);
+  transition:width 0.15s linear;
+  box-shadow:0 0 10px #ffe066;
+}
+.energy-bar.full {
+  border-color:#ffe066;
+  animation:energyPulse 0.6s ease-in-out infinite alternate;
+}
+@keyframes energyPulse {
+  from { box-shadow:0 0 12px #ffe066, 0 0 24px #ffe066 inset; }
+  to   { box-shadow:0 0 22px #ffe066, 0 0 40px #ffe066 inset, 0 0 30px #ffe066; }
+}
+.round-center { text-align:center; padding-top:5px; }
+.round-label { font-family:monospace; font-size:10px; letter-spacing:4px; color:#7df9ff; text-shadow:0 0 8px #00eaff; }
+.round-num {
+  font-family:'Segoe UI', monospace; font-weight:900;
+  font-size:38px; line-height:1; color:#fff;
+  text-shadow:0 0 15px #00eaff, 0 0 30px #00eaff;
+}
+.combo {
+  margin-top:5px; font-family:'Segoe UI', sans-serif; font-weight:900;
+  color:#ffe066; text-shadow:0 0 10px #ffaa00, 0 0 22px #ff6600;
+  opacity:0; transform:translateY(-6px) scale(0.9);
+  transition:opacity 0.18s, transform 0.18s; line-height:1;
+}
+.combo.show { opacity:1; transform:translateY(0) scale(1); }
+.combo .num { font-size:30px; letter-spacing:1px; }
+.combo .lbl { font-size:10px; letter-spacing:4px; color:#ffaa00; display:block; margin-top:2px; }
+.hp-wrap.right .combo { text-align:right; }
+
+#big-text {
+  position:fixed; top:38%; left:0; right:0; text-align:center;
+  pointer-events:none;
+  font-family:'Segoe UI', sans-serif; font-weight:900;
+  font-size:72px; letter-spacing:10px; color:#fff;
+  text-shadow:0 0 20px #00eaff, 0 0 45px #00eaff, 0 0 80px #00eaff;
+  opacity:0; transform:scale(0.75);
+  transition:opacity 0.3s, transform 0.3s; z-index:10;
+}
+#big-text.show { opacity:1; transform:scale(1); animation:pulseBig 0.5s ease-out; }
+@keyframes pulseBig {
+  0% { transform:scale(0.6); letter-spacing:24px; }
+  60% { transform:scale(1.1); letter-spacing:8px; }
+  100% { transform:scale(1); letter-spacing:10px; }
+}
+
+#ai-info {
+  position:fixed; top:90px; right:24px;
+  font-family:monospace; font-size:10.5px;
+  color:#ff8aa8; letter-spacing:2px;
+  text-shadow:0 0 8px #ff2b6b; pointer-events:none;
+  text-align:right; line-height:1.6; z-index:5;
+}
+#ai-info .dif { color:#fff; }
+
+#controls {
+  position:fixed; bottom:12px; left:0; right:0; text-align:center;
+  font-family:monospace; color:#7df9ff; font-size:11px;
+  text-shadow:0 0 6px #00eaff; pointer-events:none;
+  opacity:0.8; line-height:1.5; z-index:5;
+}
+#controls b { color:#fff; }
+.ult-key {
+  display:inline-block; padding:1px 5px;
+  border:1px solid #ffe066; color:#ffe066;
+  font-size:10px; border-radius:3px; margin-left:3px;
+}
+
+#screen-flash {
+  position:fixed; inset:0; pointer-events:none;
+  background:#fff; opacity:0; z-index:20;
+  mix-blend-mode:screen;
+}
+
+/* ========== OVERLAYS ========== */
+.overlay {
+  position:fixed; inset:0;
+  display:flex; flex-direction:column;
+  justify-content:center; align-items:center;
+  background:radial-gradient(circle at 50% 40%, rgba(5,10,20,0.85), rgba(0,0,0,0.98));
+  backdrop-filter:blur(6px);
+  z-index:100;
+  animation:fadeIn 0.25s ease-out;
+}
+.overlay.hidden { display:none; }
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+.menu-title {
+  font-family:'Segoe UI', sans-serif; font-weight:900;
+  font-size:72px; letter-spacing:14px; color:#fff;
+  text-shadow:0 0 20px #00eaff, 0 0 50px #00eaff, 0 0 90px #00eaff;
+  margin-bottom:6px;
+  animation:titleGlow 3s ease-in-out infinite alternate;
+}
+.menu-title span { color:#ff2b6b; text-shadow:0 0 20px #ff2b6b, 0 0 50px #ff2b6b; }
+@keyframes titleGlow {
+  from { text-shadow:0 0 20px #00eaff, 0 0 50px #00eaff, 0 0 90px #00eaff; }
+  to   { text-shadow:0 0 30px #7df9ff, 0 0 70px #00eaff, 0 0 130px #00eaff; }
+}
+.menu-subtitle {
+  color:#7df9ff; letter-spacing:6px;
+  font-family:monospace; font-size:12px;
+  margin-bottom:44px; opacity:0.75;
+}
+.menu-buttons { display:flex; flex-direction:column; gap:12px; }
+.menu-btn {
+  font-family:monospace; font-size:16px;
+  letter-spacing:5px; font-weight:700;
+  padding:12px 38px; cursor:pointer;
+  background:rgba(0,20,40,0.4);
+  color:#7df9ff;
+  border:2px solid #00eaff;
+  box-shadow:0 0 14px rgba(0,234,255,0.4), 0 0 14px rgba(0,234,255,0.4) inset;
+  transition:all 0.15s ease-out;
+  text-transform:uppercase;
+}
+.menu-btn:hover:not(:disabled) {
+  background:rgba(0,234,255,0.15);
+  color:#fff;
+  box-shadow:0 0 24px #00eaff, 0 0 30px #00eaff inset;
+  transform:translateY(-2px);
+}
+.menu-btn:disabled { opacity:0.35; cursor:not-allowed; border-color:#555; color:#555; box-shadow:none; }
+.menu-btn.primary {
+  border-color:#ffe066; color:#ffe066;
+  box-shadow:0 0 14px rgba(255,224,102,0.5), 0 0 14px rgba(255,224,102,0.4) inset;
+}
+.menu-btn.primary:hover:not(:disabled) {
+  background:rgba(255,224,102,0.12);
+  box-shadow:0 0 24px #ffe066, 0 0 30px #ffe066 inset;
+  color:#fff;
+}
+.menu-footer {
+  position:absolute; bottom:16px;
+  color:#7df9ff; font-family:monospace;
+  font-size:10px; letter-spacing:3px; opacity:0.5;
+}
+
+/* Char Select */
+.char-title {
+  font-family:'Segoe UI', sans-serif; font-weight:900;
+  font-size:38px; letter-spacing:10px; color:#fff;
+  text-shadow:0 0 20px #00eaff, 0 0 40px #00eaff;
+  margin-bottom:24px;
+}
+.char-grid { display:flex; gap:18px; margin-bottom:24px; }
+.char-card {
+  width:180px; padding:16px 14px;
+  background:linear-gradient(180deg, rgba(10,20,35,0.9), rgba(5,10,20,0.95));
+  border:2px solid #0a3050; border-radius:6px;
+  cursor:pointer; transition:all 0.18s ease-out;
+  position:relative; user-select:none;
+}
+.char-card:hover {
+  border-color:var(--accent); transform:translateY(-5px);
+  box-shadow:0 0 20px var(--accent), 0 0 40px rgba(0,0,0,0.5) inset;
+}
+.char-card.p1 { border-color:#00eaff; box-shadow:0 0 24px #00eaff, 0 0 40px #00eaff inset; }
+.char-card.p2 { border-color:#ff2b6b; box-shadow:0 0 24px #ff2b6b, 0 0 40px #ff2b6b inset; }
+.char-card.cursor { animation:cursorPulse 1s ease-in-out infinite alternate; }
+@keyframes cursorPulse { from { transform:translateY(-4px); } to { transform:translateY(-8px); } }
+.char-orb {
+  width:80px; height:80px; border-radius:50%;
+  margin:0 auto 12px;
+  box-shadow:0 0 20px var(--accent), 0 0 40px rgba(0,0,0,0.6) inset;
+}
+.char-name {
+  text-align:center; font-family:'Segoe UI', sans-serif;
+  font-weight:900; font-size:20px; letter-spacing:4px;
+  color:#fff; text-shadow:0 0 12px var(--accent); margin-bottom:3px;
+}
+.char-tag {
+  text-align:center; color:var(--accent);
+  font-family:monospace; font-size:10.5px; letter-spacing:2px;
+  margin-bottom:12px; opacity:0.8;
+}
+.char-stats {
+  font-family:monospace; font-size:11.5px;
+  color:#8a9db0; line-height:1.7;
+  padding:8px 6px 4px;
+  border-top:1px solid rgba(255,255,255,0.08);
+}
+.char-stats b { color:#fff; float:right; }
+.char-p1badge, .char-p2badge {
+  position:absolute; top:-11px;
+  font-family:monospace; font-weight:900;
+  font-size:11px; padding:2px 9px;
+  border-radius:3px; opacity:0; transition:opacity 0.15s;
+  letter-spacing:2px;
+}
+.char-p1badge { left:8px; background:#00eaff; color:#05060a; box-shadow:0 0 12px #00eaff; }
+.char-p2badge { right:8px; background:#ff2b6b; color:#fff; box-shadow:0 0 12px #ff2b6b; }
+.char-card.p1 .char-p1badge, .char-card.p2 .char-p2badge { opacity:1; }
+.char-ready-row {
+  display:flex; gap:50px;
+  font-family:'Segoe UI', monospace; font-weight:900;
+  font-size:19px; letter-spacing:3px;
+  color:#8a9db0; margin-bottom:16px;
+}
+.char-ready-row span { color:#fff; }
+
+/* How-to */
+.howto-panel {
+  max-width:600px; max-height:82vh; overflow-y:auto;
+  padding:26px 34px;
+  background:rgba(5,15,25,0.95);
+  border:2px solid #00eaff;
+  box-shadow:0 0 24px rgba(0,234,255,0.4);
+  color:#c9dee8; font-family:monospace;
+  font-size:12.5px; line-height:1.85;
+  border-radius:6px;
+}
+.howto-panel h3 { color:#00eaff; letter-spacing:4px; font-size:13px; margin-bottom:10px; }
+.howto-panel b { color:#fff; }
+.howto-panel .key {
+  display:inline-block; padding:1px 7px; margin:0 2px;
+  border:1px solid #00eaff; color:#7df9ff;
+  border-radius:3px; font-size:11px;
+}
+.howto-panel hr { border:none; border-top:1px solid rgba(0,234,255,0.15); margin:14px 0; }
+
+/* Story */
+#story-overlay {
+  position:fixed; inset:0; z-index:90;
+  background:linear-gradient(180deg, rgba(0,0,0,0.85), rgba(0,0,0,0.96));
+  backdrop-filter:blur(6px);
+  display:flex; flex-direction:column;
+  justify-content:flex-end; align-items:center;
+  animation:fadeIn 0.3s ease-out;
+}
+#story-overlay.hidden { display:none; }
+#story-chapter-info {
+  position:absolute; top:32px; left:50%; transform:translateX(-50%);
+  color:#7df9ff; font-family:monospace; font-size:11px; letter-spacing:6px;
+  opacity:0.75; text-shadow:0 0 8px #00eaff;
+}
+#story-title {
+  position:absolute; top:66px; left:50%; transform:translateX(-50%);
+  font-family:'Segoe UI', sans-serif; font-weight:900;
+  font-size:48px; letter-spacing:12px; color:#fff;
+  text-shadow:0 0 24px #00eaff, 0 0 50px #00eaff;
+}
+#story-subtitle {
+  position:absolute; top:130px; left:50%; transform:translateX(-50%);
+  color:#ff2b6b; font-family:monospace;
+  font-size:12px; letter-spacing:8px;
+  text-shadow:0 0 12px #ff2b6b;
+}
+#story-dialogue {
+  width:min(860px, 92vw); margin-bottom:32px;
+  padding:20px 26px 24px;
+  background:linear-gradient(180deg, rgba(5,15,30,0.96), rgba(2,8,16,0.98));
+  border:2px solid #00eaff;
+  box-shadow:0 0 30px rgba(0,234,255,0.35), 0 0 60px rgba(0,234,255,0.15) inset;
+  border-radius:4px; cursor:pointer; min-height:120px; position:relative;
+}
+#story-dialogue.hidden { display:none; }
+#story-speaker {
+  font-family:'Segoe UI', monospace; font-weight:900; font-size:14px;
+  letter-spacing:4px; margin-bottom:8px; color:#00eaff;
+}
+#story-text { color:#d8ecf4; font-family:monospace; font-size:15px; line-height:1.7; min-height:50px; }
+#story-continue {
+  position:absolute; right:20px; bottom:12px;
+  color:#7df9ff; font-family:monospace; font-size:11px; letter-spacing:2px;
+  transition:opacity 0.2s; animation:storyBlink 1s ease-in-out infinite;
+}
+@keyframes storyBlink { 0%,100% { opacity:0.4; } 50% { opacity:1; } }
+
+#story-result {
+  position:fixed; inset:0; z-index:95;
+  background:radial-gradient(circle at 50% 40%, rgba(10,20,40,0.92), rgba(0,0,0,0.98));
+  backdrop-filter:blur(8px);
+  display:flex; flex-direction:column;
+  justify-content:center; align-items:center;
+  animation:fadeIn 0.3s ease-out;
+}
+#story-result.hidden { display:none; }
+#story-result-title {
+  font-family:'Segoe UI', sans-serif; font-weight:900;
+  font-size:72px; letter-spacing:14px; color:#fff;
+  text-shadow:0 0 24px #00eaff, 0 0 60px #00eaff;
+  margin-bottom:10px; animation:pulseBig 0.6s ease-out;
+}
+#story-result-sub {
+  color:#7df9ff; font-family:monospace; font-size:13px; letter-spacing:4px;
+  margin-bottom:40px; opacity:0.85;
+}
+#story-result .menu-buttons { display:flex; flex-direction:column; gap:12px; }
+.story-boss #story-title, .story-boss #story-subtitle, .story-boss #story-chapter-info {
+  color:#a050ff; text-shadow:0 0 20px #a050ff, 0 0 45px #a050ff;
+}
+.story-boss #story-dialogue {
+  border-color:#a050ff;
+  box-shadow:0 0 30px rgba(160,80,255,0.5), 0 0 60px rgba(160,80,255,0.2) inset;
+}
+.story-boss #story-speaker { color:#a050ff; }
+
+/* Training */
+.training-panel {
+  position:fixed; top:90px; left:16px;
+  width:230px; padding:12px 14px;
+  background:linear-gradient(180deg, rgba(5,15,30,0.92), rgba(2,8,16,0.96));
+  border:1.5px solid #00eaff;
+  box-shadow:0 0 20px rgba(0,234,255,0.35);
+  color:#c9dee8; font-family:monospace; font-size:11px;
+  z-index:15; pointer-events:none; border-radius:4px;
+}
+.training-panel.hidden { display:none; }
+.training-panel .tp-header { color:#00eaff; letter-spacing:3px; font-size:11px; margin-bottom:8px; text-align:center; text-shadow:0 0 8px #00eaff; }
+.training-panel .tp-header.small { font-size:10px; margin:10px 0 6px; }
+.training-panel .tp-row { display:flex; justify-content:space-between; padding:2px 0; color:#8a9db0; }
+.training-panel .tp-val { color:#fff; font-weight:700; }
+.training-panel hr { border:none; border-top:1px solid rgba(0,234,255,0.15); margin:8px 0; }
+.training-panel .tp-frames { display:flex; gap:6px; margin-top:6px; }
+.training-panel .tp-frame-col {
+  flex:1; text-align:center; background:rgba(0,20,35,0.6);
+  padding:5px 2px; border-radius:3px; border:1px solid rgba(0,234,255,0.2);
+}
+.training-panel .tp-frame-col b { display:block; font-size:14px; color:#7df9ff; text-shadow:0 0 8px #00eaff; }
+.training-panel .tp-frame-col span { font-size:9px; letter-spacing:1px; color:#8a9db0; }
+.training-panel .tp-frame-col.active b { color:#ffe066; text-shadow:0 0 8px #ffe066; }
+.training-panel .tp-keyrow { display:flex; align-items:center; gap:6px; padding:2px 0; }
+.training-panel .kbd {
+  background:rgba(0,234,255,0.1); border:1px solid #00eaff; color:#7df9ff;
+  font-size:9px; padding:1px 5px; border-radius:3px; min-width:24px; text-align:center;
+}
+.training-panel .tp-keyrow > span:nth-child(2) { flex:1; color:#8a9db0; }
+.training-panel .state { color:#ff2b6b; font-weight:700; }
+.training-panel .state.on { color:#a0ffb0; }
+
+.challenge-panel {
+  position:fixed; top:90px; right:16px;
+  width:230px; padding:12px 14px;
+  background:linear-gradient(180deg, rgba(20,10,30,0.92), rgba(10,4,20,0.96));
+  border:1.5px solid #ffe066;
+  box-shadow:0 0 20px rgba(255,224,102,0.35);
+  color:#e8dcc9; font-family:monospace; font-size:11px;
+  z-index:15; pointer-events:none; border-radius:4px;
+}
+.challenge-panel.hidden { display:none; }
+.challenge-panel .cp-header { color:#ffe066; letter-spacing:3px; font-size:11px; margin-bottom:9px; text-align:center; text-shadow:0 0 8px #ffe066; }
+.cp-item {
+  display:flex; align-items:center; gap:7px;
+  padding:4px 6px; margin-bottom:3px; border-radius:3px;
+  font-size:10.5px; color:#8a8090; transition:all 0.15s;
+}
+.cp-item.active { background:rgba(255,224,102,0.12); color:#ffe066; box-shadow:0 0 10px rgba(255,224,102,0.3) inset; }
+.cp-item.done { color:#a0ffb0; }
+.cp-item .cp-idx {
+  display:inline-block; width:15px; height:15px; line-height:15px;
+  text-align:center; border-radius:3px;
+  background:rgba(255,224,102,0.15); border:1px solid rgba(255,224,102,0.4);
+  font-size:9px; font-weight:700;
+}
+.cp-item.done .cp-idx { background:rgba(160,255,176,0.2); border-color:#a0ffb0; color:#a0ffb0; }
+.cp-item .cp-title { flex:1; }
+.cp-item .cp-check { color:#a0ffb0; font-weight:900; }
+.cp-progress { margin-top:9px; padding-top:9px; border-top:1px solid rgba(255,224,102,0.15); }
+.cp-bar { height:5px; background:rgba(255,224,102,0.1); border-radius:3px; overflow:hidden; margin-bottom:5px; }
+.cp-fill { height:100%; width:0%; background:linear-gradient(90deg, #ffaa00, #ffe066, #fff); transition:width 0.25s; box-shadow:0 0 8px #ffe066; }
+.cp-info { display:flex; flex-direction:column; gap:2px; }
+#cp-name { color:#ffe066; font-weight:700; letter-spacing:1px; }
+#cp-hint { color:#8a8090; font-size:9.5px; }
+
+/* Touch UI */
+.touch-ui { position:fixed; inset:0; pointer-events:none; z-index:50; touch-action:none; user-select:none; }
+.touch-ui.hidden { display:none; }
+.stick-zone { position:absolute; left:0; bottom:0; width:50%; height:55%; pointer-events:auto; touch-action:none; }
+.stick-base {
+  position:absolute; left:50%; bottom:80px;
+  width:110px; height:110px; border-radius:50%;
+  background:radial-gradient(circle, rgba(0,234,255,0.15), rgba(0,234,255,0.03));
+  border:2px solid rgba(0,234,255,0.55);
+  box-shadow:0 0 24px rgba(0,234,255,0.5), 0 0 60px rgba(0,234,255,0.15) inset;
+  transform:translate(-50%, 50%); opacity:0; transition:opacity 0.15s; pointer-events:none;
+}
+.stick-knob {
+  position:absolute; left:50%; top:50%;
+  width:52px; height:52px; border-radius:50%;
+  background:radial-gradient(circle at 30% 30%, #7df9ff, #00eaff 60%, #00384a);
+  border:2px solid #fff; box-shadow:0 0 20px #00eaff, 0 0 40px rgba(0,234,255,0.6);
+  transform:translate(-50%, -50%); pointer-events:none;
+}
+.touch-buttons { position:absolute; right:12px; bottom:18px; width:240px; height:240px; pointer-events:auto; }
+.touch-btn {
+  position:absolute; border-radius:50%;
+  background:radial-gradient(circle at 30% 30%, rgba(20,35,55,0.9), rgba(5,12,20,0.85));
+  color:#7df9ff; border:2px solid #00eaff;
+  box-shadow:0 0 16px rgba(0,234,255,0.45), 0 0 20px rgba(0,234,255,0.35) inset;
+  font-family:'Segoe UI', monospace; font-weight:900; font-size:17px;
+  cursor:pointer; touch-action:none; user-select:none;
+  -webkit-tap-highlight-color:transparent;
+  transition:transform 0.05s, box-shadow 0.1s;
+}
+.touch-btn.pressed {
+  transform:scale(0.92);
+  background:radial-gradient(circle at 30% 30%, #00eaff, #006e8a);
+  color:#05060a;
+  box-shadow:0 0 32px #00eaff, 0 0 60px #00eaff;
+}
+.touch-btn.punch { right:0; bottom:64px; width:82px; height:82px; font-size:28px; }
+.touch-btn.ult {
+  right:0; bottom:158px; width:64px; height:64px; font-size:12px; letter-spacing:1px;
+  border-color:#ffaa00; color:#ffe066;
+  box-shadow:0 0 16px rgba(255,170,0,0.5), 0 0 20px rgba(255,170,0,0.4) inset;
+}
+.touch-btn.ult.ready { animation:ultReady 0.7s ease-in-out infinite alternate; }
+@keyframes ultReady {
+  from { box-shadow:0 0 16px #ffe066, 0 0 24px #ffe066 inset; transform:scale(1); }
+  to   { box-shadow:0 0 32px #ffaa00, 0 0 44px #ffe066 inset; transform:scale(1.06); }
+}
+.touch-btn.launch { right:92px; bottom:148px; width:60px; height:60px; font-size:20px; }
+.touch-btn.laser { right:92px; bottom:64px; width:60px; height:60px; font-size:20px; border-color:#7df9ff; }
+.touch-btn.jump { right:178px; bottom:104px; width:52px; height:52px; font-size:20px; border-color:#a0ffb0; color:#a0ffb0; }
+.touch-btn.block { right:178px; bottom:18px; width:52px; height:52px; font-size:18px; border-color:#a0a0ff; color:#a0a0ff; }
+
+#touch-toggle {
+  position:fixed; right:10px; top:84px;
+  width:42px; height:42px; border-radius:50%;
+  background:rgba(0,20,35,0.7); color:#7df9ff;
+  border:1px solid #00eaff; font-size:19px;
+  cursor:pointer; z-index:60;
+  box-shadow:0 0 12px rgba(0,234,255,0.5);
+  -webkit-tap-highlight-color:transparent;
+}
+#touch-toggle.on { background:rgba(0,234,255,0.2); color:#fff; }
+
+#rotate-hint {
+  position:fixed; inset:0;
+  background:rgba(0,0,0,0.92);
+  display:none; align-items:center; justify-content:center;
+  z-index:300; color:#7df9ff; font-family:monospace;
+  font-size:14px; letter-spacing:3px; text-align:center; padding:40px;
+}
+@media (orientation: portrait) and (max-width: 900px) {
+  #rotate-hint.show { display:flex; }
+}
+</style>
+</head>
+<body>
+  <div id="screen-flash"></div>
+
+  <div id="hud">
+    <div class="hp-wrap left">
+      <div class="hp-name"><span id="p1name">P1</span><span class="wins" id="p1wins">○○</span></div>
+      <div class="hp-bar"><div class="hp-fill" id="p1hp"></div></div>
+      <div class="energy-bar" id="p1energy-bar"><div class="energy-fill" id="p1energy"></div></div>
+      <div class="combo" id="p1combo"><span class="num">0</span><span class="lbl">HITS</span></div>
+    </div>
+    <div class="round-center">
+      <div class="round-label">ROUND</div>
+      <div class="round-num" id="roundNum">1</div>
+    </div>
+    <div class="hp-wrap right">
+      <div class="hp-name"><span class="wins" id="p2wins">○○</span><span id="p2name">P2</span></div>
+      <div class="hp-bar"><div class="hp-fill" id="p2hp"></div></div>
+      <div class="energy-bar" id="p2energy-bar"><div class="energy-fill" id="p2energy"></div></div>
+      <div class="combo" id="p2combo"><span class="num">0</span><span class="lbl">HITS</span></div>
+    </div>
+  </div>
+
+  <div id="ai-info">
+    <div>P2 MODE: <span class="dif" id="aiMode">AI</span></div>
+    <div>DIFFICULTY: <span class="dif" id="aiDiff">MEDIUM</span></div>
+    <div style="opacity:.5;margin-top:3px;">T · toggle · 1/2/3 · diff</div>
+  </div>
+
+  <div id="big-text"></div>
+
+  <div id="controls">
+    <b>P1</b> A/D/W · S block · F punch · R launch · G laser · <span class="ult-key">H ULT</span>
+    &nbsp;||&nbsp;
+    <b>P2</b> ←/→/↑ · ↓ block · / punch · M launch · . laser · <span class="ult-key">, ULT</span>
+    &nbsp;||&nbsp; <span class="ult-key">ESC</span> pause
+  </div>
+
+  <!-- MAIN MENU -->
+  <div id="menu-overlay" class="overlay">
+    <div class="menu-title">MECH<span>DUEL</span></div>
+    <div class="menu-subtitle">3D · ROBOT · FIGHTING</div>
+    <div class="menu-buttons">
+      <button class="menu-btn primary" id="btnStory">★ STORY MODE</button>
+      <button class="menu-btn" id="btnPlay">▶ VS MODE</button>
+      <button class="menu-btn" id="btnTraining">⚙ TRAINING</button>
+      <button class="menu-btn" id="btnHowTo">? HOW TO PLAY</button>
+    </div>
+    <div class="menu-footer">v1.0 · three.js</div>
+  </div>
+
+  <!-- CHARACTER SELECT -->
+  <div id="char-overlay" class="overlay hidden">
+    <div class="char-title">SELECT YOUR MECH</div>
+    <div class="char-grid" id="char-grid"></div>
+    <div class="char-ready-row">
+      <div>P1: <span id="p1choice">—</span></div>
+      <div>P2: <span id="p2choice">—</span></div>
+    </div>
+    <button class="menu-btn primary" id="btnFight">FIGHT!</button>
+  </div>
+
+  <!-- PAUSE -->
+  <div id="pause-overlay" class="overlay hidden">
+    <div class="menu-title">PAUSED</div>
+    <div class="menu-buttons">
+      <button class="menu-btn primary" id="btnResume">▶ RESUME</button>
+      <button class="menu-btn" id="btnRestart">⟲ RESTART</button>
+      <button class="menu-btn" id="btnQuit">⏏ MAIN MENU</button>
+    </div>
+  </div>
+
+  <!-- HOW TO PLAY -->
+  <div id="howto-overlay" class="overlay hidden">
+    <div class="howto-panel">
+      <h3>CONTROLS · PLAYER 1</h3>
+      <span class="key">A</span><span class="key">D</span> move &nbsp; <span class="key">W</span> jump &nbsp; <span class="key">S</span> block<br>
+      <span class="key">F</span> punch &nbsp; <span class="key">R</span> LAUNCHER &nbsp; <span class="key">G</span> laser &nbsp; <span class="key">H</span> ULTIMATE
+      <hr>
+      <h3>CONTROLS · PLAYER 2</h3>
+      <span class="key">←</span><span class="key">→</span> move &nbsp; <span class="key">↑</span> jump &nbsp; <span class="key">↓</span> block<br>
+      <span class="key">/</span> punch &nbsp; <span class="key">M</span> LAUNCHER &nbsp; <span class="key">.</span> laser &nbsp; <span class="key">,</span> ULTIMATE
+      <hr>
+      <h3>AERIAL COMBAT</h3>
+      · R / M = LAUNCHER uppercut — grounded only<br>
+      · Launch sends opponent airborne — chain punches for AIR JUGGLE<br>
+      · Each juggle hit does less damage (35% floor)<br>
+      · Slam opponent into a wall for a WALL BOUNCE<br>
+      <hr>
+      <h3>RULES</h3>
+      · Best of 3 rounds — first to 2 wins the match<br>
+      · Energy bar fills over time & when you land hits<br>
+      · When fully charged, unleash OVERDRIVE (EMP blast)<br>
+      · Combo counter: chain hits without a 1.15s gap
+      <hr>
+      <h3>OPTIONS</h3>
+      <span class="key">T</span> toggle P2 Human / AI<br>
+      <span class="key">1</span><span class="key">2</span><span class="key">3</span> AI difficulty<br>
+      <span class="key">ESC</span> pause &nbsp; <span class="key">Enter</span> select
+      <hr>
+      <h3>TRAINING (in fight)</h3>
+      <span class="key">F1</span> hitboxes &nbsp; <span class="key">F2</span> frame data<br>
+      <span class="key">F3</span> infinite HP &nbsp; <span class="key">F4</span> slow-mo<br>
+      <span class="key">F5</span> dummy AI &nbsp; <span class="key">R</span> reset<br>
+      <span class="key">/</span> prev challenge &nbsp; <span class="key">Backspace</span> next
+      <div style="text-align:center;margin-top:18px;">
+        <button class="menu-btn" id="btnHowToClose">◀ BACK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STORY OVERLAY -->
+  <div id="story-overlay" class="hidden">
+    <div id="story-chapter-info">CHAPTER 1 / 5</div>
+    <div id="story-title">CHAPTER 1</div>
+    <div id="story-subtitle">ROOKIE CIRCUIT</div>
+    <div id="story-dialogue">
+      <div id="story-speaker">COMMANDER VEX</div>
+      <div id="story-text"></div>
+      <div id="story-continue">[ SPACE / TAP TO CONTINUE ]</div>
+    </div>
+  </div>
+
+  <!-- STORY RESULT -->
+  <div id="story-result" class="hidden">
+    <div id="story-result-title">DEFEAT</div>
+    <div id="story-result-sub">You have fallen. Try again?</div>
+    <div class="menu-buttons">
+      <button class="menu-btn primary" id="story-result-btn">RETRY</button>
+      <button class="menu-btn" id="story-abandon-btn">◀ MAIN MENU</button>
+    </div>
+  </div>
+
+  <div id="rotate-hint" class="show">
+    <div>
+      <div style="font-size:36px;margin-bottom:14px;">↻</div>
+      ROTATE YOUR DEVICE<br>
+      <span style="opacity:.6;font-size:10px;">landscape for best experience</span>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
